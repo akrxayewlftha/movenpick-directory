@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin photos — Room Directory</title>
+<style>
+  :root{ --ink:#0d221d; --ink2:#0a1b17; --ivory:#f4ead2; --ivory-dim:#cdbf9f;
+         --gold:#c9a86a; --line:rgba(201,168,106,.28); --ok:#7fd1a6; --err:#e69; }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#163a31,var(--ink));
+       color:var(--ivory);font-family:system-ui,Segoe UI,Roboto,sans-serif;font-weight:300}
+  header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:16px;
+         padding:16px clamp(16px,4vw,40px);background:rgba(8,20,17,.85);backdrop-filter:blur(8px);
+         border-bottom:1px solid var(--line)}
+  header h1{font-family:Georgia,serif;font-weight:500;font-size:18px;letter-spacing:.04em;margin:0}
+  header .sub{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--gold)}
+  .wrap{max-width:1100px;margin:0 auto;padding:clamp(16px,4vw,40px)}
+  .bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:22px}
+  button,.btn{font:inherit;cursor:pointer;border:1px solid var(--gold);background:transparent;color:var(--gold);
+       padding:9px 16px;border-radius:999px;letter-spacing:.06em;transition:all .25s}
+  button:hover,.btn:hover{background:var(--gold);color:var(--ink)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .status{font-size:13px;color:var(--ivory-dim)}
+  .status b{color:var(--ivory)}
+  .block{margin:26px 0 8px}
+  .block h2{font-family:Georgia,serif;font-weight:500;font-size:15px;letter-spacing:.2em;text-transform:uppercase;
+            color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:8px;margin:0 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+  .card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.02)}
+  .thumb{position:relative;aspect-ratio:4/3;background:#0a1b17 center/cover no-repeat;display:block}
+  .thumb .badge{position:absolute;top:8px;left:8px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+       padding:3px 8px;border-radius:999px;background:rgba(8,20,17,.7);border:1px solid var(--line)}
+  .badge.db{color:var(--ok);border-color:rgba(127,209,166,.5)}
+  .badge.local{color:var(--ivory-dim)}
+  .cbody{padding:12px}
+  .cbody .name{font-size:14px;color:var(--ivory)}
+  .cbody .pid{font-size:11px;color:var(--ivory-dim);letter-spacing:.06em;margin-top:2px;font-family:ui-monospace,monospace}
+  .row{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap}
+  .row label.file{font-size:12px;color:var(--gold);border:1px dashed var(--line);padding:7px 10px;border-radius:8px;cursor:pointer}
+  .row input[type=file]{display:none}
+  .mini{font-size:11px;border:none;color:var(--ivory-dim);padding:4px 6px;background:none}
+  .mini:hover{background:none;color:var(--err)}
+  .gate{max-width:360px;margin:14vh auto;padding:28px;border:1px solid var(--line);border-radius:16px;
+        background:rgba(255,255,255,.03);text-align:center}
+  .gate input{width:100%;margin:14px 0;padding:11px;border-radius:9px;border:1px solid var(--line);
+        background:#0a1b17;color:var(--ivory);font:inherit}
+  .warn{font-size:12px;color:#e6b46a;background:rgba(230,180,106,.08);border:1px solid rgba(230,180,106,.3);
+        border-radius:10px;padding:10px 14px;margin-bottom:18px}
+  a{color:var(--gold)}
+</style>
+</head>
+<body>
+
+<!-- Écran de connexion (mot de passe simple, défini dans supabase-config.js) -->
+<div id="gate" class="gate">
+  <div style="font-family:Georgia,serif;font-size:20px">Espace photos</div>
+  <div style="font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--gold);margin-top:6px">Room Directory</div>
+  <input id="pw" type="password" placeholder="Mot de passe" autofocus />
+  <button id="enter" style="width:100%">Entrer</button>
+  <div id="gateMsg" class="status" style="margin-top:10px"></div>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <div>
+      <h1 id="hotelName">Room Directory</h1>
+      <div class="sub">Gestion des photos</div>
+    </div>
+    <a class="btn" href="index.html" target="_blank">Voir le site ↗</a>
+  </header>
+
+  <div class="wrap">
+    <div id="cfgWarn" class="warn" style="display:none"></div>
+    <div class="bar">
+      <button id="initBtn">Initialiser / synchroniser les blocs</button>
+      <button id="reloadBtn">Rafraîchir</button>
+      <span id="status" class="status"></span>
+    </div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  const CFG = window.SUPABASE_CONFIG || {};
+  const gate = document.getElementById('gate'), app = document.getElementById('app');
+  const gateMsg = document.getElementById('gateMsg');
+
+  // ---- Liste des blocs / sous-blocs déduite de data.js (pas de doublon de pid)
+  function buildRows(){
+    const rows = [], seen = new Set();
+    (DIRECTORY.categories||[]).forEach(cat=>{
+      const itemPids = (cat.items||[]).map(it=>it.pid).filter(Boolean);
+      if(cat.pid && !itemPids.includes(cat.pid) && !seen.has(cat.pid)){
+        rows.push({pid:cat.pid, bloc:cat.title, libelle:'Photo principale du bloc'}); seen.add(cat.pid);
+      }
+      (cat.items||[]).forEach(it=>{
+        if(it.pid && !seen.has(it.pid)){ rows.push({pid:it.pid, bloc:cat.title, libelle:it.name}); seen.add(it.pid); }
+      });
+    });
+    return rows;
+  }
+  const ROWS = buildRows();
+  document.getElementById('hotelName').textContent = (DIRECTORY.hotel||'Room Directory');
+
+  // ---- Connexion par mot de passe (protection légère, côté client) ----------
+  function tryEnter(){
+    const v = document.getElementById('pw').value;
+    if(v === (CFG.adminPassword||'')){ gate.style.display='none'; app.style.display='block'; start(); }
+    else { gateMsg.textContent = 'Mot de passe incorrect.'; }
+  }
+  document.getElementById('enter').addEventListener('click', tryEnter);
+  document.getElementById('pw').addEventListener('keydown', e=>{ if(e.key==='Enter') tryEnter(); });
+
+  let sb = null;
+  function start(){
+    const warn = document.getElementById('cfgWarn');
+    if(!CFG.url || !CFG.anonKey){
+      warn.style.display='block';
+      warn.innerHTML = "⚠ Supabase n'est pas encore configuré. Remplis <b>url</b> et <b>anonKey</b> dans "
+        + "<code>supabase-config.js</code> (voir <code>database/GUIDE-SUPABASE.md</code>). "
+        + "Les vignettes ci-dessous montrent les photos locales en attendant.";
+      render({});
+      document.getElementById('initBtn').disabled = true;
+      return;
+    }
+    sb = window.supabase.createClient(CFG.url, CFG.anonKey);
+    loadAndRender();
+  }
+
+  async function loadAndRender(){
+    setStatus('Chargement…');
+    const map = {};
+    try{
+      const { data, error } = await sb.from('photos').select('pid,url');
+      if(error) throw error;
+      (data||[]).forEach(r=>{ if(r.url) map[r.pid]=r.url; });
+      setStatus(Object.keys(map).length + ' photo(s) en base.');
+    }catch(e){ setStatus('Erreur de lecture : '+e.message, true); }
+    render(map);
+  }
+
+  function setStatus(t, err){ const s=document.getElementById('status'); s.textContent=t; s.style.color = err?'var(--err)':''; }
+
+  function render(map){
+    const list = document.getElementById('list');
+    const blocks = {};
+    ROWS.forEach(r=>{ (blocks[r.bloc]=blocks[r.bloc]||[]).push(r); });
+    list.innerHTML = Object.keys(blocks).map(bloc=>{
+      const cards = blocks[bloc].map(r=>{
+        const dbUrl = map[r.pid];
+        const src = dbUrl || ('assets/img/items/'+r.pid+'.jpg');
+        const badge = dbUrl ? '<span class="badge db">base</span>' : '<span class="badge local">locale</span>';
+        return `<div class="card" data-pid="${r.pid}">
+          <div class="thumb" style="background-image:url('${src}')">${badge}</div>
+          <div class="cbody">
+            <div class="name">${r.libelle}</div>
+            <div class="pid">${r.pid}</div>
+            <div class="row">
+              <label class="file">Remplacer…<input type="file" accept="image/*" data-pid="${r.pid}"></label>
+              ${dbUrl?'<button class="mini" data-reset="'+r.pid+'">réinitialiser</button>':''}
+            </div>
+          </div></div>`;
+      }).join('');
+      return `<section class="block"><h2>${bloc}</h2><div class="grid">${cards}</div></section>`;
+    }).join('');
+
+    list.querySelectorAll('input[type=file]').forEach(inp=>{
+      inp.addEventListener('change', e=>{ if(e.target.files[0]) upload(e.target.dataset.pid, e.target.files[0]); });
+    });
+    list.querySelectorAll('[data-reset]').forEach(b=>{
+      b.addEventListener('click', ()=>resetPhoto(b.dataset.reset));
+    });
+  }
+
+  function rowMeta(pid){ return ROWS.find(r=>r.pid===pid) || {bloc:'', libelle:''}; }
+
+  async function upload(pid, file){
+    if(!sb) return;
+    const meta = rowMeta(pid);
+    setStatus('Envoi de « '+meta.libelle+' »…');
+    const ext = (file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg';
+    const path = pid + '.' + ext;
+    try{
+      const up = await sb.storage.from(CFG.bucket).upload(path, file, { upsert:true, contentType:file.type||'image/jpeg' });
+      if(up.error) throw up.error;
+      const pub = sb.storage.from(CFG.bucket).getPublicUrl(path);
+      const url = pub.data.publicUrl + '?t=' + Date.now();
+      const db = await sb.from('photos').upsert(
+        { pid, url, bloc:meta.bloc, libelle:meta.libelle, updated_at:new Date().toISOString() },
+        { onConflict:'pid' });
+      if(db.error) throw db.error;
+      setStatus('✓ « '+meta.libelle+' » mise à jour.');
+      loadAndRender();
+    }catch(e){ setStatus('Échec : '+e.message, true); }
+  }
+
+  async function resetPhoto(pid){
+    if(!sb) return;
+    const meta = rowMeta(pid);
+    setStatus('Réinitialisation de « '+meta.libelle+' »…');
+    try{
+      const db = await sb.from('photos').upsert({ pid, url:null, bloc:meta.bloc, libelle:meta.libelle }, { onConflict:'pid' });
+      if(db.error) throw db.error;
+      setStatus('✓ « '+meta.libelle+' » revient à la photo locale.');
+      loadAndRender();
+    }catch(e){ setStatus('Échec : '+e.message, true); }
+  }
+
+  async function initRows(){
+    if(!sb) return;
+    setStatus('Synchronisation des blocs…');
+    try{
+      const payload = ROWS.map(r=>({ pid:r.pid, bloc:r.bloc, libelle:r.libelle }));
+      const db = await sb.from('photos').upsert(payload, { onConflict:'pid' });
+      if(db.error) throw db.error;
+      setStatus('✓ '+payload.length+' blocs synchronisés.');
+      loadAndRender();
+    }catch(e){ setStatus('Échec : '+e.message, true); }
+  }
+
+  document.getElementById('initBtn').addEventListener('click', initRows);
+  document.getElementById('reloadBtn').addEventListener('click', loadAndRender);
+})();
+</script>
+</body>
+</html>
