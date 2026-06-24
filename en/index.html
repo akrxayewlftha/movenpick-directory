@@ -191,11 +191,12 @@ header.bar::after{content:"";position:absolute;left:clamp(20px,4vw,56px);right:c
 @media (max-width:1080px){ .grid{grid-template-columns:repeat(4,1fr)} }
 @media (max-width:820px){
   .grid{grid-template-columns:repeat(3,1fr)}
-  .split{grid-template-columns:1fr;gap:14px}
-  .detail{border-left:none;padding-left:0}
-  .list{max-height:30vh;flex-direction:row;overflow-x:auto;mask-image:none;-webkit-mask-image:none}
+  /* mobile: natural stacking (sub-block list, then detail card) that scrolls */
+  .split{display:flex;flex-direction:column;flex:0 0 auto;min-height:auto;gap:16px}
+  .detail{border-left:none;padding-left:0;justify-content:flex-start}
+  .list{max-height:34vh;flex-direction:row;overflow-x:auto;mask-image:none;-webkit-mask-image:none}
   .li{min-width:200px}
-  /* mobile: blocks overflow the screen -> allow vertical scrolling */
+  /* blocks overflow the screen -> allow vertical scrolling */
   .screen{overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .home{justify-content:flex-start;padding-bottom:34px}
   .detail p{max-height:none}
