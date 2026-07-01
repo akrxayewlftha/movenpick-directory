@@ -26,21 +26,34 @@
   .block{margin:26px 0 8px}
   .block h2{font-family:Georgia,serif;font-weight:500;font-size:15px;letter-spacing:.2em;text-transform:uppercase;
             color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:8px;margin:0 0 14px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
-  .card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.02)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
+  .card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.02);display:flex;flex-direction:column}
   .thumb{position:relative;aspect-ratio:4/3;background:#0a1b17 center/cover no-repeat;display:block}
   .thumb .badge{position:absolute;top:8px;left:8px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
        padding:3px 8px;border-radius:999px;background:rgba(8,20,17,.7);border:1px solid var(--line)}
   .badge.db{color:var(--ok);border-color:rgba(127,209,166,.5)}
   .badge.local{color:var(--ivory-dim)}
-  .cbody{padding:12px}
+  .cbody{padding:12px;display:flex;flex-direction:column;gap:6px}
   .cbody .name{font-size:14px;color:var(--ivory)}
   .cbody .pid{font-size:11px;color:var(--ivory-dim);letter-spacing:.06em;margin-top:2px;font-family:ui-monospace,monospace}
-  .row{display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap}
+  .row{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
   .row label.file{font-size:12px;color:var(--gold);border:1px dashed var(--line);padding:7px 10px;border-radius:8px;cursor:pointer}
+  .row label.file:hover{background:rgba(201,168,106,.1)}
   .row input[type=file]{display:none}
   .mini{font-size:11px;border:none;color:var(--ivory-dim);padding:4px 6px;background:none}
   .mini:hover{background:none;color:var(--err)}
+  .fl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-top:10px}
+  .ta,.in{width:100%;border:1px solid var(--line);background:#0a1b17;color:var(--ivory);font:inherit;font-size:13px;
+       border-radius:9px;padding:9px 11px;resize:vertical}
+  .ta:focus,.in:focus{outline:none;border-color:var(--gold)}
+  .ta{min-height:84px;line-height:1.45}
+  .menu-link{font-size:12px;color:var(--ok);text-decoration:none;border:1px solid rgba(127,209,166,.4);
+       padding:6px 10px;border-radius:8px}
+  .menu-link:hover{background:rgba(127,209,166,.12)}
+  .muted{font-size:12px;color:var(--ivory-dim)}
+  .save{font-size:12px;padding:8px 16px}
+  .save:hover{background:var(--gold);color:var(--ink)}
+  .cstatus{font-size:12px;color:var(--ok)}
   .gate{max-width:360px;margin:14vh auto;padding:28px;border:1px solid var(--line);border-radius:16px;
         background:rgba(255,255,255,.03);text-align:center}
   .gate input{width:100%;margin:14px 0;padding:11px;border-radius:9px;border:1px solid var(--line);
@@ -65,7 +78,7 @@
   <header>
     <div>
       <h1 id="hotelName">Room Directory</h1>
-      <div class="sub">Gestion des photos</div>
+      <div class="sub">Gestion des sous-blocs</div>
     </div>
     <a class="btn" href="index.html" target="_blank">Voir le site ↗</a>
   </header>
@@ -90,16 +103,24 @@
   const gate = document.getElementById('gate'), app = document.getElementById('app');
   const gateMsg = document.getElementById('gateMsg');
 
+  // ---- Helpers ---------------------------------------------------------------
+  function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function escAttr(s){ return escHtml(s).replace(/"/g,'&quot;'); }
+  function norm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+  function isPdf(u){ return /\.pdf($|\?)/i.test(u||''); }
+
   // ---- Liste des blocs / sous-blocs déduite de data.js (pas de doublon de pid)
   function buildRows(){
     const rows = [], seen = new Set();
     (DIRECTORY.categories||[]).forEach(cat=>{
       const itemPids = (cat.items||[]).map(it=>it.pid).filter(Boolean);
       if(cat.pid && !itemPids.includes(cat.pid) && !seen.has(cat.pid)){
-        rows.push({pid:cat.pid, bloc:cat.title, libelle:'Photo principale du bloc'}); seen.add(cat.pid);
+        rows.push({pid:cat.pid, bloc:cat.title, libelle:'Photo principale du bloc', isItem:false}); seen.add(cat.pid);
       }
       (cat.items||[]).forEach(it=>{
-        if(it.pid && !seen.has(it.pid)){ rows.push({pid:it.pid, bloc:cat.title, libelle:it.name}); seen.add(it.pid); }
+        if(it.pid && !seen.has(it.pid)){
+          rows.push({pid:it.pid, bloc:cat.title, libelle:it.name, isItem:true, sid:it.sid||'', body:it.body||''}); seen.add(it.pid);
+        }
       });
     });
     return rows;
@@ -117,6 +138,9 @@
   document.getElementById('pw').addEventListener('keydown', e=>{ if(e.key==='Enter') tryEnter(); });
 
   let sb = null;
+  let MAP = {};                          // pid -> ligne photos { url, description, opening_hours, menu_url }
+  let SB_INFO = { byId:{}, byName:{} };  // valeurs héritées (services_validation + photo_candidates)
+
   function start(){
     const warn = document.getElementById('cfgWarn');
     if(!CFG.url || !CFG.anonKey){
@@ -124,7 +148,7 @@
       warn.innerHTML = "⚠ Supabase n'est pas encore configuré. Remplis <b>url</b> et <b>anonKey</b> dans "
         + "<code>supabase-config.js</code> (voir <code>database/GUIDE-SUPABASE.md</code>). "
         + "Les vignettes ci-dessous montrent les photos locales en attendant.";
-      render({});
+      render();
       document.getElementById('initBtn').disabled = true;
       return;
     }
@@ -132,69 +156,135 @@
     loadAndRender();
   }
 
+  // Valeurs héritées (horaires + menu Metabase) pour pré-remplir les champs.
+  async function loadInherited(){
+    SB_INFO = { byId:{}, byName:{} };
+    try{
+      const sv = await sb.from('services_validation').select('service_id,name,opening_hours,chosen_photo_url');
+      (sv.data||[]).forEach(r=>{ if(!r.service_id) return;
+        const rec = SB_INFO.byId[r.service_id] || (SB_INFO.byId[r.service_id]={name:'',opening_hours:'',menu_url:''});
+        if(r.name) rec.name=r.name;
+        if(r.opening_hours) rec.opening_hours=r.opening_hours;
+        if(r.chosen_photo_url) rec.menu_url=r.chosen_photo_url;
+        if(r.name) SB_INFO.byName[norm(r.name)]=rec;
+      });
+      const pc = await sb.from('photo_candidates').select('service_id,libelle,url,kind').eq('source','metabase');
+      (pc.data||[]).forEach(c=>{ if(!c.service_id||!c.url) return;
+        const rec = SB_INFO.byId[c.service_id] || (SB_INFO.byId[c.service_id]={name:'',opening_hours:'',menu_url:''});
+        if(!rec.menu_url) rec.menu_url=c.url;
+        if(!rec.name && c.libelle) rec.name=c.libelle;
+        if(c.libelle && !SB_INFO.byName[norm(c.libelle)]) SB_INFO.byName[norm(c.libelle)]=rec;
+      });
+    }catch(e){ /* tables de curation absentes -> pas d'héritage, sans gravité */ }
+  }
+  function inheritedFor(r){ return (r.sid && SB_INFO.byId[r.sid]) || SB_INFO.byName[norm(r.libelle||'')] || null; }
+
   async function loadAndRender(){
     setStatus('Chargement…');
-    const map = {};
+    MAP = {};
     try{
-      const { data, error } = await sb.from('photos').select('pid,url');
+      // select('*') : robuste même si la migration schema-overrides.sql n'est pas
+      // encore passée (les colonnes en plus seront simplement absentes).
+      const { data, error } = await sb.from('photos').select('*');
       if(error) throw error;
-      (data||[]).forEach(r=>{ if(r.url) map[r.pid]=r.url; });
-      setStatus(Object.keys(map).length + ' photo(s) en base.');
+      (data||[]).forEach(r=>{ if(r.pid) MAP[r.pid]=r; });
+      await loadInherited();
+      setStatus(Object.keys(MAP).length + ' sous-bloc(s) en base.');
     }catch(e){ setStatus('Erreur de lecture : '+e.message, true); }
-    render(map);
+    render();
   }
 
   function setStatus(t, err){ const s=document.getElementById('status'); s.textContent=t; s.style.color = err?'var(--err)':''; }
+  function cstatus(pid, t, err){ const s=document.querySelector('[data-cs="'+pid+'"]'); if(s){ s.textContent=t; s.style.color = err?'var(--err)':'var(--ok)'; } }
 
-  function render(map){
+  function render(){
     const list = document.getElementById('list');
     const blocks = {};
     ROWS.forEach(r=>{ (blocks[r.bloc]=blocks[r.bloc]||[]).push(r); });
     list.innerHTML = Object.keys(blocks).map(bloc=>{
       const cards = blocks[bloc].map(r=>{
-        const dbUrl = map[r.pid];
+        const ov = MAP[r.pid] || {};
+        const dbUrl = ov.url;
         const src = dbUrl || ('assets/img/items/'+r.pid+'.jpg');
         const badge = dbUrl ? '<span class="badge db">base</span>' : '<span class="badge local">locale</span>';
+        const photoCtrls = `<div class="row">
+              <label class="file">Remplacer la photo…<input type="file" accept="image/*" data-photo="${r.pid}"></label>
+              ${dbUrl?'<button class="mini" data-reset="'+r.pid+'">réinitialiser</button>':''}
+            </div>`;
+        let editor = '';
+        if(r.isItem){
+          const inh = inheritedFor(r) || {};
+          const descVal  = (ov.description!=null && ov.description!=='') ? ov.description : (r.body||'');
+          const hoursVal = (ov.opening_hours!=null && ov.opening_hours!=='') ? ov.opening_hours : (inh.opening_hours||'');
+          const menuUrl  = ov.menu_url || inh.menu_url || '';
+          const menuLink = menuUrl
+            ? '<a class="menu-link" href="'+escAttr(menuUrl)+'" target="_blank" rel="noopener">Menu actuel ↗ ('+(isPdf(menuUrl)?'PDF':'image')+')</a>'
+            : '<span class="muted">Aucun menu</span>';
+          const bmode = ov.booking_mode || 'whatsapp';
+          const burl  = ov.booking_url || '';
+          const opt = (v,l)=> '<option value="'+v+'"'+(bmode===v?' selected':'')+'>'+l+'</option>';
+          editor = `
+            <label class="fl">Description</label>
+            <textarea class="ta" data-desc="${r.pid}" placeholder="Texte affiché sur le site…">${escHtml(descVal)}</textarea>
+            <label class="fl">Horaires d'ouverture</label>
+            <input class="in" type="text" data-hours="${r.pid}" value="${escAttr(hoursVal)}" placeholder="ex. Tous les jours · 19h00–23h00">
+            <label class="fl">Menu (photo ou PDF)</label>
+            <div class="row">${menuLink}
+              <label class="file">Téléverser…<input type="file" accept="image/*,application/pdf" data-menu="${r.pid}"></label>
+              ${ov.menu_url?'<button class="mini" data-menureset="'+r.pid+'">retirer</button>':''}
+            </div>
+            <label class="fl">Réservation</label>
+            <select class="in" data-bmode="${r.pid}">${opt('whatsapp','Via WhatsApp')}${opt('link','Via un lien')}${opt('none','Non réservable')}</select>
+            <input class="in" type="url" data-burl="${r.pid}" value="${escAttr(burl)}" placeholder="https://… (lien de réservation)" style="margin-top:6px;${bmode==='link'?'':'display:none'}">
+            <div class="row"><button class="save" data-save="${r.pid}">Enregistrer</button> <span class="cstatus" data-cs="${r.pid}"></span></div>`;
+        }
         return `<div class="card" data-pid="${r.pid}">
           <div class="thumb" style="background-image:url('${src}')">${badge}</div>
           <div class="cbody">
-            <div class="name">${r.libelle}</div>
+            <div class="name">${escHtml(r.libelle)}</div>
             <div class="pid">${r.pid}</div>
-            <div class="row">
-              <label class="file">Remplacer…<input type="file" accept="image/*" data-pid="${r.pid}"></label>
-              ${dbUrl?'<button class="mini" data-reset="'+r.pid+'">réinitialiser</button>':''}
-            </div>
+            ${photoCtrls}
+            ${editor}
           </div></div>`;
       }).join('');
-      return `<section class="block"><h2>${bloc}</h2><div class="grid">${cards}</div></section>`;
+      return `<section class="block"><h2>${escHtml(bloc)}</h2><div class="grid">${cards}</div></section>`;
     }).join('');
 
-    list.querySelectorAll('input[type=file]').forEach(inp=>{
-      inp.addEventListener('change', e=>{ if(e.target.files[0]) upload(e.target.dataset.pid, e.target.files[0]); });
+    list.querySelectorAll('input[data-photo]').forEach(inp=>{
+      inp.addEventListener('change', e=>{ if(e.target.files[0]) upload(e.target.dataset.photo, e.target.files[0]); });
     });
-    list.querySelectorAll('[data-reset]').forEach(b=>{
-      b.addEventListener('click', ()=>resetPhoto(b.dataset.reset));
+    list.querySelectorAll('input[data-menu]').forEach(inp=>{
+      inp.addEventListener('change', e=>{ if(e.target.files[0]) uploadMenu(e.target.dataset.menu, e.target.files[0]); });
+    });
+    list.querySelectorAll('[data-reset]').forEach(b=>{ b.addEventListener('click', ()=>resetPhoto(b.dataset.reset)); });
+    list.querySelectorAll('[data-menureset]').forEach(b=>{ b.addEventListener('click', ()=>resetMenu(b.dataset.menureset)); });
+    list.querySelectorAll('[data-save]').forEach(b=>{ b.addEventListener('click', ()=>saveMeta(b.dataset.save)); });
+    list.querySelectorAll('select[data-bmode]').forEach(sel=>{
+      sel.addEventListener('change', e=>{
+        const u = document.querySelector('[data-burl="'+e.target.dataset.bmode+'"]');
+        if(u) u.style.display = (e.target.value==='link') ? '' : 'none';
+      });
     });
   }
 
   function rowMeta(pid){ return ROWS.find(r=>r.pid===pid) || {bloc:'', libelle:''}; }
 
+  // --- Remplacer la photo principale du sous-bloc ----------------------------
   async function upload(pid, file){
     if(!sb) return;
     const meta = rowMeta(pid);
-    setStatus('Envoi de « '+meta.libelle+' »…');
+    setStatus('Envoi de la photo « '+meta.libelle+' »…');
     const ext = (file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'') || 'jpg';
     const path = pid + '.' + ext;
     try{
       const up = await sb.storage.from(CFG.bucket).upload(path, file, { upsert:true, contentType:file.type||'image/jpeg' });
       if(up.error) throw up.error;
-      const pub = sb.storage.from(CFG.bucket).getPublicUrl(path);
-      const url = pub.data.publicUrl + '?t=' + Date.now();
+      const url = sb.storage.from(CFG.bucket).getPublicUrl(path).data.publicUrl + '?t=' + Date.now();
       const db = await sb.from('photos').upsert(
         { pid, url, bloc:meta.bloc, libelle:meta.libelle, updated_at:new Date().toISOString() },
         { onConflict:'pid' });
       if(db.error) throw db.error;
-      setStatus('✓ « '+meta.libelle+' » mise à jour.');
+      setStatus('✓ Photo « '+meta.libelle+' » mise à jour.');
       loadAndRender();
     }catch(e){ setStatus('Échec : '+e.message, true); }
   }
@@ -202,13 +292,69 @@
   async function resetPhoto(pid){
     if(!sb) return;
     const meta = rowMeta(pid);
-    setStatus('Réinitialisation de « '+meta.libelle+' »…');
+    setStatus('Réinitialisation de la photo « '+meta.libelle+' »…');
     try{
       const db = await sb.from('photos').upsert({ pid, url:null, bloc:meta.bloc, libelle:meta.libelle }, { onConflict:'pid' });
       if(db.error) throw db.error;
       setStatus('✓ « '+meta.libelle+' » revient à la photo locale.');
       loadAndRender();
     }catch(e){ setStatus('Échec : '+e.message, true); }
+  }
+
+  // --- Téléverser un menu (photo ou PDF) -------------------------------------
+  async function uploadMenu(pid, file){
+    if(!sb) return;
+    const meta = rowMeta(pid);
+    cstatus(pid, 'Envoi du menu…');
+    const ext = (file.name.split('.').pop()||'pdf').toLowerCase().replace(/[^a-z0-9]/g,'') || 'pdf';
+    const path = 'menus/' + pid + '.' + ext;
+    try{
+      const up = await sb.storage.from(CFG.bucket).upload(path, file, { upsert:true, contentType:file.type||'application/octet-stream' });
+      if(up.error) throw up.error;
+      const url = sb.storage.from(CFG.bucket).getPublicUrl(path).data.publicUrl + '?t=' + Date.now();
+      const db = await sb.from('photos').upsert(
+        { pid, menu_url:url, bloc:meta.bloc, libelle:meta.libelle, updated_at:new Date().toISOString() },
+        { onConflict:'pid' });
+      if(db.error) throw db.error;
+      cstatus(pid, '✓ Menu mis à jour.');
+      loadAndRender();
+    }catch(e){ cstatus(pid, 'Échec : '+e.message, true); }
+  }
+
+  async function resetMenu(pid){
+    if(!sb) return;
+    const meta = rowMeta(pid);
+    cstatus(pid, 'Retrait du menu…');
+    try{
+      const db = await sb.from('photos').upsert({ pid, menu_url:null, bloc:meta.bloc, libelle:meta.libelle }, { onConflict:'pid' });
+      if(db.error) throw db.error;
+      cstatus(pid, '✓ Menu retiré.');
+      loadAndRender();
+    }catch(e){ cstatus(pid, 'Échec : '+e.message, true); }
+  }
+
+  // --- Enregistrer description + horaires (sans recharger : préserve les autres
+  //     cartes en cours d'édition) ----------------------------------------------
+  async function saveMeta(pid){
+    if(!sb) return;
+    const meta = rowMeta(pid);
+    const descEl  = document.querySelector('[data-desc="'+pid+'"]');
+    const hoursEl = document.querySelector('[data-hours="'+pid+'"]');
+    const bmodeEl = document.querySelector('[data-bmode="'+pid+'"]');
+    const burlEl  = document.querySelector('[data-burl="'+pid+'"]');
+    const description = descEl ? descEl.value : '';
+    const opening_hours = hoursEl ? hoursEl.value : '';
+    const booking_mode = bmodeEl ? bmodeEl.value : 'whatsapp';
+    const booking_url = (booking_mode==='link' && burlEl) ? burlEl.value : '';
+    cstatus(pid, 'Enregistrement…');
+    try{
+      const db = await sb.from('photos').upsert(
+        { pid, description, opening_hours, booking_mode, booking_url, bloc:meta.bloc, libelle:meta.libelle, updated_at:new Date().toISOString() },
+        { onConflict:'pid' });
+      if(db.error) throw db.error;
+      MAP[pid] = Object.assign({}, MAP[pid], { pid, description, opening_hours, booking_mode, booking_url });
+      cstatus(pid, '✓ Enregistré.');
+    }catch(e){ cstatus(pid, 'Échec : '+e.message, true); }
   }
 
   async function initRows(){

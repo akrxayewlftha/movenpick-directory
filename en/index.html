@@ -237,6 +237,27 @@ header.bar::after{content:"";position:absolute;left:clamp(20px,4vw,56px);right:c
 .wa-cancel:hover{border-color:var(--ivory-dim);color:var(--ivory)}
 .wa-send{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#25d366;border:1px solid #25d366;color:#06281a}
 .wa-send:hover{background:#1ebe5b}.wa-send svg{width:16px;height:16px;fill:currentColor}
+
+/* ---- "Information" dialog: opening hours + menu photo ---- */
+.info-modal{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+  background:rgba(6,16,13,.74);backdrop-filter:blur(5px);padding:18px}
+.info-modal.open{display:flex;animation:waFade .25s var(--ease)}
+.info-box{position:relative;width:min(460px,94vw);max-height:88vh;overflow-y:auto;
+  background:linear-gradient(155deg,var(--ink-2),var(--ink));border:1px solid var(--line);
+  border-radius:18px;padding:clamp(20px,3vw,30px);box-shadow:0 30px 80px -30px #000;animation:cardIn3d .4s var(--spring)}
+.info-box h4{font-family:var(--serif);font-weight:500;font-size:24px;color:var(--gold-soft);margin:0 18px 16px 0}
+.info-close{position:absolute;top:12px;right:14px;width:30px;height:30px;border:none;background:none;cursor:pointer;
+  color:var(--ivory-dim);font-size:26px;line-height:1;transition:color .25s var(--ease)}
+.info-close:hover{color:var(--gold)}
+.info-label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.info-val{font-size:15px;color:var(--ivory);line-height:1.5;white-space:pre-line}
+.info-val.muted{color:var(--ivory-dim);font-style:italic}
+.info-hours{margin-bottom:18px}
+.info-menu-img{width:100%;border-radius:12px;border:1px solid var(--line);display:block;background:rgba(0,0,0,.2)}
+.info-menu-link{display:inline-flex;align-items:center;gap:8px;font-size:13px;letter-spacing:.04em;text-decoration:none;
+  border-radius:999px;padding:9px 16px;border:1px solid var(--gold);background:transparent;color:var(--gold);transition:all .3s var(--ease)}
+.info-menu-link:hover{background:var(--gold);color:var(--ink)}
+.info-menu-link svg{width:16px;height:16px;fill:currentColor}
 </style>
 </head>
 <body>
@@ -393,9 +414,11 @@ header.bar::after{content:"";position:absolute;left:clamp(20px,4vw,56px);right:c
     function show(i){
       const it=cat.items[i];
       const heroPhoto=it.pid?imgTag(it.pid,`../assets/img/items/${it.pid}.jpg`):photo(id);
+      const ov=(it.pid&&window.OVERRIDE_DB&&window.OVERRIDE_DB[it.pid])||null;
+      const bodyTxt=(ov&&ov.description)||it.body||'';
       inner.classList.remove('show');void inner.offsetWidth;
       inner.innerHTML=`<div class="d-card"><div class="d-hero">${illus(id)}${heroPhoto}<span class="d-glare"></span></div>
-        <div class="d-body">${it.tagline?`<div class="d-tag">${esc(it.tagline)}</div>`:''}<h3 class="sheen">${esc(it.name)}</h3>${chips(it.chips)}<p>${esc(it.body)}</p>${waActions(id)}</div></div>`;
+        <div class="d-body">${it.tagline?`<div class="d-tag">${esc(it.tagline)}</div>`:''}<h3 class="sheen">${esc(it.name)}</h3>${chips(it.chips)}<p>${esc(bodyTxt)}</p>${itemActions(id,it)}</div></div>`;
       requestAnimationFrame(()=>inner.classList.add('show'));
       const card=inner.querySelector('.d-card'); if(card)tilt(card,6);
       waBind(inner,it);
@@ -413,13 +436,70 @@ header.bar::after{content:"";position:absolute;left:clamp(20px,4vw,56px);right:c
   const WA_SKIP=['bienvenue','urgence'];   // blocks with no buttons (no booking, no info)
   const WA_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.05 4.91A9.82 9.82 0 0 0 12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.86 9.86 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.91-9.91a9.85 9.85 0 0 0-2.91-7.02zM12.04 20.13a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.82c0 4.54-3.69 8.23-8.24 8.23zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.42-.56-.42-.14 0-.31-.02-.47-.02-.17 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.11-.22-.17-.47-.29z"/></svg>';
   function waOpen(text){ window.open('https://wa.me/'+WA_NUM+'?text='+encodeURIComponent(text),'_blank','noopener'); }
-  function waActions(catId){ return (WA_NUM && WA_SKIP.indexOf(catId)<0)?`<div class="d-actions">
-      <button class="wa-btn" data-wa="info" type="button">${WA_ICON}<span>Information</span></button>
-      <button class="wa-btn book" data-wa="book" type="button">${WA_ICON}<span>Book</span></button></div>`:''; }
-  function waBind(box,it){ box.querySelectorAll('[data-wa]').forEach(b=>b.addEventListener('click',()=>{
-      if(b.dataset.wa==='info') waOpen(`Hello, I would like more information about “${it.name}”.`);
-      else waBookOpen(it);
-    })); }
+  /* localised labels for the information dialog */
+  const INFO_T={info:"Information",book:"Book",hours:"Opening hours",
+    menu:"Menu",noHours:"Hours not provided",viewMenu:"View menu (PDF)",close:"Close"};
+  const INFO_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4.6a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8ZM13.5 17.4h-3v-1.2h.75v-3.1h-.75v-1.2h2.25v4.3h.75v1.2Z"/></svg>';
+  const PDF_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h8l4 4v16H6V2Zm8 1.5V6h2.5L14 3.5ZM8.5 12.5h1.2a1.6 1.6 0 0 1 0 3.2H9.4v1.3H8.5v-4.5Zm.9 2.3h.3a.7.7 0 0 0 0-1.4h-.3v1.4Z"/></svg>';
+  const LINK_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h4v2H8v8h8v-3h2v4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Zm6-1h5v5h-2V9.4l-5.3 5.3-1.4-1.4L15.6 8H13V6Z"/></svg>';
+
+  /* normalise a name to match services_validation (Supabase) */
+  function norm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
+  /* pretty-print raw opening hours ("monday 19:00 to 23:00, …").
+     If the value is not in the machine format (already written text), keep it. */
+  function fmtHours(raw){
+    const s=String(raw||'').trim(); if(!s) return '';
+    const DAY={monday:0,tuesday:1,wednesday:2,thursday:3,friday:4,saturday:5,sunday:6,
+               lundi:0,mardi:1,mercredi:2,jeudi:3,vendredi:4,samedi:5,dimanche:6};
+    const ABBR=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const re=/(monday|tuesday|wednesday|thursday|friday|saturday|sunday|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+(\d{1,2}:\d{2})\s*(?:to|[-–—]|à|a)\s*(\d{1,2}:\d{2})/gi;
+    const ranges=[[],[],[],[],[],[],[]]; let m, found=false;
+    while((m=re.exec(s.toLowerCase()))){ const d=DAY[m[1]]; if(d==null) continue; ranges[d].push({o:m[2],c:m[3]}); found=true; }
+    if(!found) return s;
+    const t=hm=>{ const p=hm.split(':'); return p[0].padStart(2,'0')+':'+p[1]; };
+    const allday=(o,c)=> o==='00:00' && (c==='23:59'||c==='00:00'||c==='24:00');
+    const texts=ABBR.map((_,d)=> ranges[d].length? ranges[d].map(r=> allday(r.o,r.c)?'24h':(t(r.o)+'–'+t(r.c))).join(' / ') : null);
+    const present=texts.filter(x=>x!=null).length;
+    const groups=[]; let i=0;
+    while(i<7){ if(texts[i]==null){ i++; continue; } let j=i; while(j+1<7 && texts[j+1]===texts[i]) j++; groups.push({a:i,b:j,txt:texts[i]}); i=j+1; }
+    if(!groups.length) return s;
+    return groups.map(g=>{
+      const label=(present===7&&groups.length===1)?'Daily':(g.a===g.b?ABBR[g.a]:ABBR[g.a]+'–'+ABBR[g.b]);
+      return label+' · '+g.txt;
+    }).join('\n');
+  }
+  /* find {hours, photo} for an item: by `sid` (service_id) else by name */
+  function itemInfo(it){
+    if(!it) return null;
+    const ov=(it.pid&&window.OVERRIDE_DB&&window.OVERRIDE_DB[it.pid])||null;
+    const byId=window.INFO_DB||{}, byName=window.INFO_BY_NAME||{};
+    const svc=(it.sid&&byId[it.sid])||byName[norm(it.name)]||null;
+    const hours=(ov&&ov.opening_hours)||(svc&&svc.opening_hours)||'';
+    const photo=(ov&&ov.menu_url)||(svc&&svc.menu_url)||'';
+    if(!hours&&!photo) return null;
+    const kind=/\.pdf($|\?)/i.test(photo)?'pdf':((svc&&svc.menu_kind)||(photo?'image':''));
+    return {hours,photo,kind};
+  }
+
+  /* per-item buttons: "Information" (dialog) + "Book" (WhatsApp) */
+  function itemActions(catId,it){
+    if(WA_SKIP.indexOf(catId)>=0) return '';
+    const ov=(it.pid&&window.OVERRIDE_DB&&window.OVERRIDE_DB[it.pid])||null;
+    const mode=(ov&&ov.booking_mode)||'whatsapp';   // default: WhatsApp
+    const infoBtn=itemInfo(it)?`<button class="wa-btn" data-act="info" type="button">${INFO_ICON}<span>${INFO_T.info}</span></button>`:'';
+    let bookBtn='';
+    if(mode==='link'){
+      if(ov&&ov.booking_url) bookBtn=`<button class="wa-btn book" data-booklink="${esc(ov.booking_url)}" type="button">${LINK_ICON}<span>${INFO_T.book}</span></button>`;
+    } else if(mode!=='none' && WA_NUM){
+      bookBtn=`<button class="wa-btn book" data-wa="book" type="button">${WA_ICON}<span>${INFO_T.book}</span></button>`;
+    }
+    return (infoBtn||bookBtn)?`<div class="d-actions">${infoBtn}${bookBtn}</div>`:'';
+  }
+  function waBind(box,it){
+    box.querySelectorAll('[data-act="info"]').forEach(b=>b.addEventListener('click',()=>infoOpen(it)));
+    box.querySelectorAll('[data-wa="book"]').forEach(b=>b.addEventListener('click',()=>waBookOpen(it)));
+    box.querySelectorAll('[data-booklink]').forEach(b=>b.addEventListener('click',()=>window.open(b.dataset.booklink,'_blank','noopener')));
+  }
   let waItem=null;
   const waModal=document.createElement('div'); waModal.className='wa-modal';
   waModal.innerHTML=`<div class="wa-box"><h4>Booking</h4><div class="wa-item" id="waName"></div>
@@ -443,8 +523,38 @@ header.bar::after{content:"";position:absolute;left:clamp(20px,4vw,56px);right:c
     waOpen(`Hello, I would like to book “${waItem.name}” for ${pax} guest(s) on ${date} at ${time}.`);
   });
 
+  /* ---- "Information" dialog: opening hours + menu photo ---- */
+  const infoModal=document.createElement('div'); infoModal.className='info-modal';
+  infoModal.innerHTML=`<div class="info-box">
+    <button class="info-close" type="button" id="infoClose" aria-label="${INFO_T.close}">&times;</button>
+    <h4 id="infoTitle"></h4>
+    <div class="info-hours" id="infoHours"></div>
+    <div class="info-menu" id="infoMenu"></div></div>`;
+  document.body.appendChild(infoModal);
+  function infoOpen(it){
+    const info=itemInfo(it)||{};
+    infoModal.querySelector('#infoTitle').textContent=it.name||'';
+    infoModal.querySelector('#infoHours').innerHTML=
+      `<div class="info-label">${INFO_T.hours}</div>`+
+      (info.hours?`<div class="info-val">${esc(fmtHours(info.hours))}</div>`
+                 :`<div class="info-val muted">${INFO_T.noHours}</div>`);
+    const menu=infoModal.querySelector('#infoMenu');
+    if(info.photo){
+      const pdf=info.kind==='pdf'||/\.pdf($|\?)/i.test(info.photo);
+      menu.innerHTML=`<div class="info-label">${INFO_T.menu}</div>`+(pdf
+        ?`<a class="info-menu-link" href="${esc(info.photo)}" target="_blank" rel="noopener">${PDF_ICON}<span>${INFO_T.viewMenu}</span></a>`
+        :`<a href="${esc(info.photo)}" target="_blank" rel="noopener"><img class="info-menu-img" src="${esc(info.photo)}" alt="" onerror="this.closest('a').remove()"></a>`);
+      menu.style.display='';
+    } else { menu.innerHTML=''; menu.style.display='none'; }
+    infoModal.classList.add('open');
+  }
+  function infoClose(){ infoModal.classList.remove('open'); }
+  infoModal.querySelector('#infoClose').addEventListener('click',infoClose);
+  infoModal.addEventListener('click',e=>{ if(e.target===infoModal) infoClose(); });
+
   document.getElementById('brand').addEventListener('click',()=>home('back'));
   document.addEventListener('keydown',e=>{ if(e.key!=='Escape')return;
+    if(infoModal.classList.contains('open')){ infoClose(); return; }
     if(waModal.classList.contains('open')){ waClose(); return; }
     if(!stage.querySelector('.home')) home('back'); });
   /* wait for DB urls (if configured) before first render, then show */
